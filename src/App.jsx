@@ -16,8 +16,9 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Engine is initialized using the imported THREE module
     setIsLoaded(true);
-    engineRef.current = initEngine(mountRef.current, setHp);
+    engineRef.current = initEngine(mountRef.current, setHp, THREE);
 
     return () => {
       if (engineRef.current) engineRef.current.cleanup();
@@ -82,9 +83,7 @@ export default function App() {
 
 // --- THREE.JS ENGINE LOGIC --- //
 
-function initEngine(container, updateHpCallback) {
-  const THREE = window.THREE;
-
+function initEngine(container, updateHpCallback, THREE) {
   // Scene Setup
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111115);
@@ -139,10 +138,8 @@ function initEngine(container, updateHpCallback) {
   ];
 
   markerConfig.forEach((m, i) => {
-    // 0 is North (-Z), so we start at -PI/2 (or subtract from standard circle math)
     const angle = (i * Math.PI) / 4;
     const r = arenaRadius - 1.5;
-    // Standard trigonometric circle rotated so 0 is -Z
     const x = r * Math.sin(angle);
     const z = -r * Math.cos(angle);
 
@@ -156,7 +153,7 @@ function initEngine(container, updateHpCallback) {
   const pGeo = new THREE.CylinderGeometry(pRadius, pRadius, 1.5, 16);
   const pMat = new THREE.MeshStandardMaterial({ color: 0x00ccff });
   const player = new THREE.Mesh(pGeo, pMat);
-  player.position.y = 0.75; // Half height of 1.5
+  player.position.y = 0.75;
   scene.add(player);
 
   let playerBaseColor = new THREE.Color(0x00ccff);
@@ -173,8 +170,8 @@ function initEngine(container, updateHpCallback) {
   const onMouseUp = (e) => { if (e.button === 2) isRightClicking = false; };
   const onMouseMove = (e) => {
     if (isRightClicking) {
-      camTheta -= e.movementX * 0.0025; // Slowed down by 50%
-      camPhi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, camPhi + e.movementY * 0.0025)); // Inverted Y axis and slowed
+      camTheta -= e.movementX * 0.0025;
+      camPhi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, camPhi + e.movementY * 0.0025));
     }
   };
 
@@ -187,31 +184,25 @@ function initEngine(container, updateHpCallback) {
   // --- Game State Variables ---
   let lastTime = performance.now();
   let currentHp = 100;
-  // Exflare Mechanics
-  const exaflares = []; // Track active moving mechanics
-  const aoes = []; // Track exact explosions currently active
-  const aoeRadius = 3; // 25% of arena diameter (24 / 4 = 6 width, so 3 radius)
+  const exaflares = [];
+  const aoes = [];
+  const aoeRadius = 3;
   let exaflareSpawnTimeouts = [];
 
-  // Pity system state
   let lastPattern = null;
   let patternRepeatCount = 0;
 
-  // Exaflare visual template
   const explosionGeo = new THREE.CylinderGeometry(aoeRadius, aoeRadius, 0.5, 32);
   const explosionMat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.6 });
-
-  // Telegraph visual (Red ring that appears 4s before moving)
   const telegraphGeo = new THREE.RingGeometry(aoeRadius - 0.4, aoeRadius, 32);
   const telegraphMat = new THREE.MeshBasicMaterial({ color: 0xff2222, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
 
   function spawnExaflareSequence() {
-    // Clear any pending spawns from a previous click
     exaflareSpawnTimeouts.forEach(clearTimeout);
     exaflareSpawnTimeouts = [];
 
     const numSets = 6;
-    const spawnDelay = 2500; // Exactly 3 seconds between sets spawning
+    const spawnDelay = 2500;
 
     for (let i = 0; i < numSets; i++) {
       const timeoutId = setTimeout(() => {
@@ -222,29 +213,20 @@ function initEngine(container, updateHpCallback) {
   }
 
   function spawnExaflareSet(setIndex) {
-    // Alternates between NW (0, 2, 4) and NE (1, 3, 5)
     const isNorthWest = setIndex % 2 === 0;
-
-    // Direction vectors: NW goes SE (+X, +Z), NE goes SW (-X, +Z)
     const dx = isNorthWest ? 0.707 : -0.707;
     const dz = 0.707;
-
-    // Perpendicular vector for spacing out the parallel lanes
     const px = -dz;
     const pz = dx;
-
-    // Start base position near the edge (15 units from center: 12 arena radius + 3 aoe radius)
-    // This perfectly spaces 7 steps of 5 units to finish exactly at the opposite edge (-15)
     const startDist = 15;
     const baseX = -dx * startDist;
     const baseZ = -dz * startDist;
 
-    // Randomize configuration with Pity System:
     let isPatternA = Math.random() < 0.5;
     if (lastPattern === isPatternA) {
       patternRepeatCount++;
       if (patternRepeatCount >= 2) {
-        isPatternA = !isPatternA; // Force switch
+        isPatternA = !isPatternA;
         patternRepeatCount = 0;
       }
     } else {
@@ -252,16 +234,12 @@ function initEngine(container, updateHpCallback) {
     }
     lastPattern = isPatternA;
 
-    // Pattern A: (EXA) (EMPTY) (EXA) (EMPTY) -> Lanes at -9 and +3
-    // Pattern B: (EMPTY) (EXA) (EMPTY) (EXA) -> Lanes at -3 and +9
     const activeOffsets = isPatternA ? [-9, 3] : [-3, 9];
 
-    // Create the 2 exaflares in this set
     activeOffsets.forEach((offset) => {
       const startX = baseX + px * offset;
       const startZ = baseZ + pz * offset;
 
-      // Spawn the telegraph mesh immediately
       const mesh = new THREE.Mesh(telegraphGeo, telegraphMat);
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(startX, 0.05, startZ);
@@ -272,10 +250,10 @@ function initEngine(container, updateHpCallback) {
         z: startZ,
         dx: dx,
         dz: dz,
-        stepDistance: 5, // 6 jumps of 5 units = 30 units total distance (from 15 to -15)
-        stepDelay: 500, // 0.5s per pulse
-        nextStepTime: performance.now() + 4000, // 4 second initial delay
-        stepsRemaining: 7, // Exactly 7 pulses
+        stepDistance: 5,
+        stepDelay: 500,
+        nextStepTime: performance.now() + 4000,
+        stepsRemaining: 7,
         isTelegraphing: true,
         mesh: mesh
       });
@@ -283,35 +261,21 @@ function initEngine(container, updateHpCallback) {
   }
 
   function handleDamage() {
-    flashTimer = 300; // ms to flash red
+    flashTimer = 300;
     currentHp -= 15;
     updateHpCallback(currentHp);
   }
 
-  // --- Render Loop ---
   let animationId;
   const tick = () => {
     const now = performance.now();
     const dt = now - lastTime;
     lastTime = now;
 
-    // 1. Camera Logic & Legacy Movement
-    // The arena diameter is 24 (radius 12 * 2). To cross in 7.5 seconds:
-    // Speed = 24 / 7.5 = 3.2 units per second.
-    // We multiply by (dt / 1000) to ensure frame-rate independent movement.
     const moveSpeed = 3.2 * (dt / 1000);
-
-    // Calculate the camera's flat forward vector
-    const camForward = new THREE.Vector3(
-      player.position.x - camera.position.x,
-      0,
-      player.position.z - camera.position.z
-    ).normalize();
-
-    // Calculate the flat right vector
+    const camForward = new THREE.Vector3(player.position.x - camera.position.x, 0, player.position.z - camera.position.z).normalize();
     const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize();
 
-    // Accumulate movement intent based on WASD
     let moveDir = new THREE.Vector3(0, 0, 0);
     if (keys['w']) moveDir.add(camForward);
     if (keys['s']) moveDir.sub(camForward);
@@ -322,7 +286,6 @@ function initEngine(container, updateHpCallback) {
       moveDir.normalize().multiplyScalar(moveSpeed);
       player.position.add(moveDir);
 
-      // Clamp player to arena radius
       const distFromCenter = Math.sqrt(player.position.x ** 2 + player.position.z ** 2);
       if (distFromCenter > arenaRadius - pRadius) {
         const angle = Math.atan2(player.position.z, player.position.x);
@@ -331,28 +294,21 @@ function initEngine(container, updateHpCallback) {
       }
     }
 
-    // Update Camera Position (orbit around player)
     camera.position.x = player.position.x + camRadius * Math.cos(camPhi) * Math.sin(camTheta);
     camera.position.y = player.position.y + camRadius * Math.sin(camPhi);
     camera.position.z = player.position.z + camRadius * Math.cos(camPhi) * Math.cos(camTheta);
     camera.lookAt(player.position);
 
-    // 2. Process Exaflares
     for (let i = exaflares.length - 1; i >= 0; i--) {
       const exa = exaflares[i];
-
       if (now >= exa.nextStepTime) {
-
-        // 4 seconds have passed: Transition from Telegraph to Active
         if (exa.isTelegraphing) {
           exa.isTelegraphing = false;
           scene.remove(exa.mesh);
           if (exa.mesh.geometry) exa.mesh.geometry.dispose();
         }
 
-        // Active Moving Phase
         if (!exa.isTelegraphing) {
-          // Create an AoE explosion at current position
           const mesh = new THREE.Mesh(explosionGeo, explosionMat);
           mesh.position.set(exa.x, 0.25, exa.z);
           scene.add(mesh);
@@ -361,11 +317,10 @@ function initEngine(container, updateHpCallback) {
             mesh,
             x: exa.x,
             z: exa.z,
-            expiresAt: now + 500, // Explosion lasts 0.5s
+            expiresAt: now + 500,
             hasDamaged: false
           });
 
-          // Advance to next step
           exa.x += exa.dx * exa.stepDistance;
           exa.z += exa.dz * exa.stepDistance;
           exa.stepsRemaining--;
@@ -378,30 +333,23 @@ function initEngine(container, updateHpCallback) {
       }
     }
 
-    // 3. Process Active Explosions & Collision Detection
     for (let i = aoes.length - 1; i >= 0; i--) {
       const aoe = aoes[i];
-
-      // Collision Math: 2D Circle intersection
       if (!aoe.hasDamaged) {
         const dx = player.position.x - aoe.x;
         const dz = player.position.z - aoe.z;
         const dist = Math.sqrt(dx*dx + dz*dz);
-
         if (dist < aoeRadius + pRadius) {
           handleDamage();
           aoe.hasDamaged = true;
         }
       }
-
-      // Cleanup expired AoEs
       if (now >= aoe.expiresAt) {
         scene.remove(aoe.mesh);
         aoes.splice(i, 1);
       }
     }
 
-    // 4. Visual Damage Feedback
     if (flashTimer > 0) {
       pMat.color.setHex(0xff0000);
       flashTimer -= dt;
@@ -415,7 +363,6 @@ function initEngine(container, updateHpCallback) {
 
   tick();
 
-  // Resize handler
   const onResize = () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -423,7 +370,6 @@ function initEngine(container, updateHpCallback) {
   };
   window.addEventListener('resize', onResize);
 
-  // Cleanup function returned to React
   return {
     spawnExaflareSequence,
     cleanup: () => {
@@ -440,14 +386,11 @@ function initEngine(container, updateHpCallback) {
   };
 }
 
-// --- HELPER: Create standard FFXIV Waymarks --- //
 function createFloorMarker(text, colorHex, THREE) {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
   const ctx = canvas.getContext('2d');
-
-  // Draw circle border
   ctx.beginPath();
   ctx.arc(128, 128, 110, 0, 2 * Math.PI);
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -455,8 +398,6 @@ function createFloorMarker(text, colorHex, THREE) {
   ctx.lineWidth = 12;
   ctx.strokeStyle = colorHex;
   ctx.stroke();
-
-  // Draw text
   ctx.fillStyle = colorHex;
   ctx.font = 'bold 130px sans-serif';
   ctx.textAlign = 'center';
@@ -467,12 +408,11 @@ function createFloorMarker(text, colorHex, THREE) {
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    depthWrite: false, // Prevents flickering against the floor
+    depthWrite: false,
   });
 
   const planeGeo = new THREE.PlaneGeometry(3, 3);
   const plane = new THREE.Mesh(planeGeo, material);
-  plane.rotation.x = -Math.PI / 2; // Lay flat
-
+  plane.rotation.x = -Math.PI / 2;
   return plane;
 }
