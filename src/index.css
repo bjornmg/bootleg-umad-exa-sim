@@ -66,6 +66,10 @@ body {
   box-sizing: border-box;
 }
 
+canvas {
+  display: block;
+}
+
 h1,
 h2 {
   font-family: var(--heading);
