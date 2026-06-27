@@ -16,19 +16,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    // 1. Dynamically load Three.js to ensure it works in any barebones React environment
-    if (!THREE) {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-      script.onload = () => {
-        setIsLoaded(true);
-        engineRef.current = initEngine(mountRef.current, setHp);
-      };
-      document.head.appendChild(script);
-    } else {
-      setIsLoaded(true);
-      engineRef.current = initEngine(mountRef.current, setHp);
-    }
+    setIsLoaded(true);
+    engineRef.current = initEngine(mountRef.current, setHp);
 
     return () => {
       if (engineRef.current) engineRef.current.cleanup();
